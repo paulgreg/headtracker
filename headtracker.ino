@@ -82,11 +82,35 @@ void loop(void) {
     roll = orientation.roll;
     pitch = orientation.pitch;
   }
-  
+
   mag.getEvent(&mag_event); // Calculate the heading using the magnetometer
   if (dof.magGetOrientation(SENSOR_AXIS_Z, &mag_event, &orientation)) {
     yaw = orientation.heading;
   }
+  
+  // Normalize to 0-360
+  if (yaw < 0)  {
+    yaw = 360 + yaw;
+  }
+/*
+  yaw = yaw - inityaw;
+  if (yaw > 180) {
+    yaw = -360 + yaw;
+  } else if (yaw < -180) {
+    yaw = 360 + yaw;
+  }
+
+  if (yaw > 45.0) yaw = 45.0;
+  if (yaw < -45.0) yaw = -45.0;
+  if (yaw >= 0) { 
+    yaw = fscale(0, 45, 512, 1023, yaw, 0);
+  } else { 
+    yaw = fscale(-45, 0, 0, 512, yaw, 0);
+  }
+  if (yaw < 0) yaw = 0;
+  if (yaw > 1023) yaw = 1023;
+  Joystick.X(yaw);
+*/
 
   if (pitch >= 0) {
     pitch -= 90;
@@ -95,50 +119,20 @@ void loop(void) {
     pitch += 90;
     pitch = fscale(-90, 0, 512, 0, pitch, 0);
   }
-  if (pitch < 0) {
-    pitch = 0;
-  }
-  if (pitch > 1023) {
-    pitch = 1023;
-  }
+  if (pitch < 0) pitch = 0;
+  if (pitch > 1023) pitch = 1023;
   Joystick.Y(pitch);
-/*
-   yaw = yaw - inityaw;
-   if (yaw > 180) {
-    yaw = -360 + yaw;
-  }
-  else if (yaw < -180) {
-    yaw = 360 + yaw;
-  }
-  if (yaw < 0) {
-    yaw = fscale(-40, 0, 0, 512, yaw, 0);
-  }
-  else {
-    yaw = fscale(0, 40, 512, 1023, yaw, 0);
-  }
-  if (yaw < 0) {
-    yaw = 0;
-  }
-  if (yaw > 1023) {
-    yaw = 1023;
-  }
-  Joystick.X(yaw);
 
 
-  if (roll < 0) {
-    roll = fscale(-25, 0, 0, 512, roll, 0);
+  if (roll >= 0) {
+    roll = fscale(0, 90, 512, 1023, roll, 0);
+  } else {
+    roll = fscale(-90, 0, 0, 512, roll, 0);
   }
-  else {
-    roll = fscale(0, 25, 512, 1023, roll, 0);
-  }
-  if (roll < 0) {
-    roll = 0;
-  }
-  if (roll > 1023) {
-    roll = 1023;
-  }
+  if (roll < 0) roll = 0;
+  if (roll > 1023) roll = 1023;
   Joystick.Z(roll);
-*/
+
 #ifdef DEBUG
   Serial.print(F("Yaw: "));
   Serial.print(yaw);
