@@ -3,24 +3,26 @@
 #include <Adafruit_LSM303_U.h>
 #include <Adafruit_L3GD20_U.h>
 #include <Adafruit_9DOF.h>
+#include <LSM303.h>
 
 // Uncommenting following line will enable debugging output
-#define DEBUG
+//#define DEBUG
 
 /* Assign a unique ID to the sensors */
 Adafruit_9DOF                dof   = Adafruit_9DOF();
 Adafruit_LSM303_Accel_Unified accel = Adafruit_LSM303_Accel_Unified(30301);
-Adafruit_LSM303_Mag_Unified   mag   = Adafruit_LSM303_Mag_Unified(30302);
 
 /* Update this with the correct SLP for accurate altitude measurements */
 float seaLevelPressure = SENSORS_PRESSURE_SEALEVELHPA;
 
+LSM303 compass;
+
 const int ledPin = 11;
 
 int inityaw;  // Store initial heading
+float yaw = 0.0, pitch = 0.0;
 
 sensors_event_t accel_event;
-sensors_event_t mag_event;
 sensors_vec_t   orientation;
 
 void fail(void) {
@@ -30,7 +32,6 @@ void fail(void) {
     digitalWrite(ledPin, LOW);
     delay(250);
   }
-
 }
 
 void setup(void) {
@@ -42,6 +43,8 @@ void setup(void) {
   pinMode(ledPin, OUTPUT);
   digitalWrite(ledPin, LOW);
 
+  Wire.begin();
+
   if (!accel.begin()) {
     /* There was a problem detecting the LSM303 ... check your connections */
 #ifdef DEBUG
@@ -50,88 +53,45 @@ void setup(void) {
     fail();
   }
 
-  if (!mag.begin()) {
-    /* There was a problem detecting the LSM303 ... check your connections */
-#ifdef DEBUG
-    Serial.println("Ooops, no LSM303 detected ... Check your wiring!");
-#endif
-    fail();
-  }
+  compass.init();
+  compass.enableDefault();
+  
+  // Calibration values. Use the Calibrate example program to get the values for your compass.
+  compass.m_min.x = -517; compass.m_min.y = -554; compass.m_min.z = -527;
+  compass.m_max.x = +501; compass.m_max.y = +457; compass.m_max.z = 320;
+
 
   delay(500);
   digitalWrite(ledPin, HIGH);
   delay(500);
   digitalWrite(ledPin, LOW);
-  mag.getEvent(&mag_event);
-  if (dof.magGetOrientation(SENSOR_AXIS_Z, &mag_event, &orientation)) {
-    inityaw = orientation.heading;  // Grab an initial heading
+
+  compass.read();
+  yaw = compass.heading((LSM303::vector){0.0,-1.0,0.0});
+  inityaw = yaw;  // Grab an initial heading
     if (inityaw < 0) {
       inityaw += 360;
     }
-  }
   delay(500);
 
   digitalWrite(ledPin, HIGH);
 }
 
 void loop(void) {
-  float pitch = 0.0, roll = 0.0, yaw = 0.0;
 
   accel.getEvent(&accel_event); // Calculate pitch and roll from the raw accelerometer data
   if (dof.accelGetOrientation(&accel_event, &orientation)) {
-    roll = orientation.roll;
     pitch = orientation.pitch;
   }
 
-  mag.getEvent(&mag_event); // Calculate the heading using the magnetometer
-  if (dof.magGetOrientation(SENSOR_AXIS_Z, &mag_event, &orientation)) {
-    yaw = orientation.heading;
-  }
-  
-  // Normalize to 0-360
-  if (yaw < 0)  {
-    yaw = 360 + yaw;
-  }
-/*
-  yaw = yaw - inityaw;
-  if (yaw > 180) {
-    yaw = -360 + yaw;
-  } else if (yaw < -180) {
-    yaw = 360 + yaw;
-  }
+  compass.read();
+  yaw = compass.heading((LSM303::vector){0.0,-1.0,0.0});
 
-  if (yaw > 45.0) yaw = 45.0;
-  if (yaw < -45.0) yaw = -45.0;
-  if (yaw >= 0) { 
-    yaw = fscale(0, 45, 512, 1023, yaw, 0);
-  } else { 
-    yaw = fscale(-45, 0, 0, 512, yaw, 0);
-  }
-  if (yaw < 0) yaw = 0;
-  if (yaw > 1023) yaw = 1023;
+  yaw = normalize(yaw - inityaw, 90);
   Joystick.X(yaw);
-*/
 
-  if (pitch >= 0) {
-    pitch -= 90;
-    pitch = fscale(0, 90, 1023, 512, pitch, 0);
-  } else {
-    pitch += 90;
-    pitch = fscale(-90, 0, 512, 0, pitch, 0);
-  }
-  if (pitch < 0) pitch = 0;
-  if (pitch > 1023) pitch = 1023;
+  pitch = normalize(pitch, 90);
   Joystick.Y(pitch);
-
-
-  if (roll >= 0) {
-    roll = fscale(0, 90, 512, 1023, roll, 0);
-  } else {
-    roll = fscale(-90, 0, 0, 512, roll, 0);
-  }
-  if (roll < 0) roll = 0;
-  if (roll > 1023) roll = 1023;
-  Joystick.Z(roll);
 
 #ifdef DEBUG
   Serial.print(F("Yaw: "));
@@ -139,9 +99,6 @@ void loop(void) {
   Serial.print(F("; "));
   Serial.print(F("Pitch: "));
   Serial.print(pitch);
-  Serial.print(F("; "));
-  Serial.print(F("Roll: "));
-  Serial.print(roll);
   Serial.print(F("; "));
   Serial.println(F(""));
 #endif
@@ -151,6 +108,20 @@ void loop(void) {
 #else
   delay(10);
 #endif
+}
+
+float normalize(float value, float angle) {
+  float v = value;
+
+  if (v >= 0) {
+    v = fscale(0, angle, 512, 1023, v, 0);
+  } else {
+    v = fscale(-angle, 0, 0, 512, v, 0);
+  }
+  if (v < 0) v = 0;
+  if (v > 1023) v = 1023;
+
+  return v;
 }
 
 float fscale( float originalMin, float originalMax, float newBegin, float newEnd, float inputValue, float curve) {
